@@ -14,6 +14,7 @@ import requests
 from pydantic import ValidationError
 
 from instagrapi import config
+from instagrapi.device import DeviceGenerator
 from instagrapi.exceptions import (
     BadCredentials,
     ClientThrottledError,
@@ -382,6 +383,7 @@ class LoginMixin(PreLoginFlowMixin, PostLoginFlowMixin):
         password: Union[str, None] = None,
         relogin: bool = False,
         verification_code: str = "",
+        device_model: str | None = None,
     ) -> bool:
         """
         Login
@@ -396,6 +398,9 @@ class LoginMixin(PreLoginFlowMixin, PostLoginFlowMixin):
             Whether or not to re login, default False
         verification_code: str
             2FA verification code
+        device_model: str, optional
+            Specific Android device model to spoof during login. If not
+            provided a random model will be chosen.
 
         Returns
         -------
@@ -420,6 +425,11 @@ class LoginMixin(PreLoginFlowMixin, PostLoginFlowMixin):
         #        return True  # already login
         if self.user_id and not relogin:
             return True  # already login
+
+        if device_model or not self.user_agent:
+            info = DeviceGenerator.generate(device_model)
+            self.set_device(info["model"])
+            self.set_user_agent(info["user_agent"])
         try:
             self.pre_login_flow()
         except (PleaseWaitFewMinutes, ClientThrottledError):
@@ -638,9 +648,12 @@ class LoginMixin(PreLoginFlowMixin, PostLoginFlowMixin):
             json.dump(self.get_settings(), fp, indent=4)
         return True
 
-    def set_device(self, device: Dict = None, reset: bool = False) -> bool:
+    def set_device(self, device: Union[Dict, str, None] = None, reset: bool = False) -> bool:
         """
-        Helper to set a device for login
+        Helper to set a device for login. ``device`` can be either a dictionary
+        with all device parameters or a model string. When a string is
+        provided a minimal configuration will be generated internally using
+        :class:`~instagrapi.device.DeviceGenerator`.
 
         Parameters
         ----------
@@ -652,6 +665,22 @@ class LoginMixin(PreLoginFlowMixin, PostLoginFlowMixin):
         bool
             A boolean value
         """
+        if isinstance(device, str):
+            info = DeviceGenerator.generate(device)
+            android_release = ".".join(str(v) for v in info["android_version"])
+            device = {
+                "app_version": DeviceGenerator.APP_VERSION,
+                "android_version": info["android_version"][0],
+                "android_release": android_release,
+                "dpi": DeviceGenerator.DPI,
+                "resolution": DeviceGenerator.RESOLUTION,
+                "manufacturer": info["manufacturer"],
+                "device": info["model"],
+                "model": info["model"],
+                "cpu": DeviceGenerator.CPU,
+                "version_code": DeviceGenerator.VERSION_CODE,
+            }
+
         self.device_settings = device or {
             "app_version": "269.0.0.18.75",
             "android_version": 26,
