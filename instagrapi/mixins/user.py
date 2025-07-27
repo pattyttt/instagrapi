@@ -168,13 +168,15 @@ class UserMixin:
             "Accept-Language": "en-US,en;q=0.9",
             "Priority": "u=1, i",
         }
+        update_headers = False
         data = extract_user_gql(
             json.loads(
                 self.public_request(
                     f"https://www.instagram.com/api/v1/users/web_profile_info/?username={username}",
                     headers=temporary_public_headers,
                 )
-            )["data"]["user"]
+            )["data"]["user"],
+            update_headers=update_headers,
         )
         return data
 
@@ -605,23 +607,17 @@ class UserMixin:
         unique_set = set()
         users = []
         while True:
-            try:
-                result = self.private_request(
-                    f"friendships/{user_id}/following/",
-                    params={
-                        "max_id": max_id,
-                        "count": max_amount or MAX_USER_COUNT,
-                        "rank_token": self.rank_token,
-                        "search_surface": "follow_list_page",
-                        "query": "",
-                        "enable_groups": "true",
-                    },
-                )
-            except PleaseWaitFewMinutes:
-                self.logger.warning(
-                    "[!] Rate limited: Please wait a few minutes before trying again."
-                )
-                return [], max_id
+            result = self.private_request(
+                f"friendships/{user_id}/following/",
+                params={
+                    "max_id": max_id,
+                    "count": max_amount or MAX_USER_COUNT,
+                    "rank_token": self.rank_token,
+                    "search_surface": "follow_list_page",
+                    "query": "",
+                    "enable_groups": "true",
+                },
+            )
             for user in result["users"]:
                 user = extract_user_short(user)
                 if user.pk in unique_set:
